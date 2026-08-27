@@ -1,0 +1,28 @@
+{
+    "Tags": {
+        "ReferringPhysicianName": "DR Josh",
+        "NameOfPhysiciansReadingStudy": "Radiologist 1raazs",
+        "OperatorsName": "Technician",
+        "InstitutionalDepartmentName": "Radiologi",
+        "BodyPartExamined": "CT",
+        "PatientID": "20262205002",
+        "PatientName": "PATIENT 052202. MR",
+        "PatientSex": "M",
+        "PatientBirthDate": "19950110",
+        "AccessionNumber": "ACC-20262205002",
+        "RequestedProcedureID": "REQ-20262205002",
+        "RequestedProcedureDescription": "CT",
+        "ScheduledProcedureStepSequence": [
+            {
+                "Modality": "CT",
+                "ScheduledProcedureStepStartDate": "20260522",
+                "ScheduledProcedureStepStartTime": "100000",
+                "ScheduledStationAETitle": "CT01",
+                "ScheduledProcedureStepID": "SPS-20262205002",
+                "ScheduledProcedureStepDescription": "CT",
+                "ScheduledStationName": "RAD-ROOM2",
+                "ScheduledProcedureStepLocation": "RADIOLOGI"
+            }
+        ]
+    }
+}
