@@ -1,0 +1,5 @@
+pydicom
+numpy
+Pillow
+fastapi
+uvicorn

@@ -10,6 +10,7 @@
 6. [Referensi Field JSON Radiology](#referensi-field-json-radiology)
 7. [Daftar Location yang Didukung](#daftar-location)
 8. [Contoh Hasil Akhir](#contoh-hasil-akhir)
+9. [UI Web — DICOM Generator](#ui-web--dicom-generator)
 
 ---
 
@@ -17,12 +18,17 @@
 
 ```
 pythondicom/
-├── metadata.json        # Template metadata untuk tag DICOM
-├── create-dicom.py      # Core library: buat file .dcm dari array/gambar
-├── generate_batch.py    # Script batch: buat DICOM per location
-├── export_text.py       # Script: ekspor .dcm → .json (format tabel radiology)
-├── readmetadata.py      # Utility: baca metadata dari file .dcm
-└── *.dcm / *.json       # Output yang dihasilkan
+├── run.py                       # Entry point web UI (python run.py)
+├── dicom_generator/             # Package utama
+│   ├── core.py                  #   buat file .dcm dari array/gambar
+│   ├── engine.py                #   engine batch generate (jumlah × rentang tanggal)
+│   ├── exporter.py              #   ekspor .dcm → .json (format tabel radiology)
+│   ├── fakedata.py              #   pool data dummy (nama, RS, lokasi, dll.)
+│   ├── paths.py                 #   resolusi path project
+│   └── web/                     #   web UI (FastAPI + frontend statis)
+├── scripts/                     # Skrip CLI / utility
+├── data/metadata.json           # Template metadata untuk tag DICOM
+└── output/                      # Semua file .dcm / .json hasil generate
 ```
 
 ---
@@ -30,17 +36,21 @@ pythondicom/
 ## Alur Kerja
 
 ```
-metadata.json ──► generate_batch.py ──► *.dcm (file DICOM)
-                                           │
-                                           ▼
-                                    export_text.py ──► *.json (siap insert ke tabel radiology)
+data/metadata.json ──► scripts/create_dicom.py / web UI ──► output/*.dcm
+                                                                │
+                                                                ▼
+                                              scripts/export_json.py ──► *.json
+                                              (siap insert ke tabel radiology)
 ```
+
+> Cara termudah: jalankan web UI (`python run.py`) — jumlah file, rentang
+> tanggal, dan ekspor JSON bisa diatur langsung dari browser.
 
 ---
 
 ## Langkah 1 — Siapkan Metadata
 
-File `metadata.json` mendefinisikan tag DICOM yang akan diterapkan ke file `.dcm`.
+File `data/metadata.json` mendefinisikan tag DICOM yang akan diterapkan ke file `.dcm`.
 
 ### Format
 
@@ -113,7 +123,7 @@ File `metadata.json` mendefinisikan tag DICOM yang akan diterapkan ke file `.dcm
 ### Opsi A — Satu file dengan CLI
 
 ```bash
-python create-dicom.py --out pasien001.dcm --patient "Budi^Santoso" --id 123456 --metadata metadata.json
+python scripts/create_dicom.py --out pasien001.dcm --patient "Budi^Santoso" --id 123456 --metadata data/metadata.json
 ```
 
 Parameter lengkap:
@@ -127,12 +137,12 @@ Parameter lengkap:
 | `--bits` | Tidak | 8 | Kedalaman bit (8 atau 16) |
 | `--patient` | Tidak | `Anon^Patient` | Nama pasien |
 | `--id` | Tidak | `0000` | ID pasien |
-| `--metadata` | Tidak | - | Path file JSON atau string JSON |
+| `--metadata` | Tidak | `data/metadata.json` | Path file JSON atau string JSON |
 
 ### Opsi B — Batch per Location
 
 ```bash
-python generate_batch.py
+python scripts/generate_batch.py
 ```
 
 Script ini akan otomatis membuat 4 file DICOM, satu untuk setiap location:
@@ -144,11 +154,11 @@ Script ini akan otomatis membuat 4 file DICOM, satu untuk setiap location:
 | Rawat Inap | `Rawat_Inap_<PatientID>.dcm` | `RAW01` | `RAD-RAWAT_INAP` |
 | Umum / Poliklinik | `Umum___Poliklinik_<PatientID>.dcm` | `UMU01` | `RAD-UMUM_/_POLIKLINIK` |
 
-Data pasien, dokter, dan tanggal di-generate secara random. Tanggal default menggunakan variabel `TODAY_DATE` dan `TODAY_TIME` di dalam script.
+Data pasien, dokter, dan tanggal di-generate secara random. Tanggal default menggunakan variabel `TODAY_DATE` dan `TODAY_TIME` di dalam `scripts/generate_batch.py`. File hasil ditulis ke `output/generated_dicoms/`.
 
 ### Mengubah Tanggal
 
-Edit baris berikut di `generate_batch.py`:
+Edit baris berikut di `scripts/generate_batch.py`:
 
 ```python
 TODAY_DATE = "20260618"   # Format: YYYYMMDD
@@ -157,7 +167,7 @@ TODAY_TIME = "100000"     # Format: HHMMSS
 
 ### Menambah Location Baru
 
-Edit list `LOCATIONS` di `generate_batch.py`:
+Edit list `LOCATIONS` di `scripts/generate_batch.py`:
 
 ```python
 LOCATIONS = ["IGD", "ICU", "Rawat Inap", "Umum / Poliklinik", "VK", "UGD"]
@@ -168,7 +178,7 @@ LOCATIONS = ["IGD", "ICU", "Rawat Inap", "Umum / Poliklinik", "VK", "UGD"]
 ## Langkah 3 — Ekspor ke JSON
 
 ```bash
-python export_text.py
+python scripts/export_json.py [folder]     # default: output/generated_dicoms
 ```
 
 Script ini membaca semua file `*.dcm` di folder dan mengkonversi masing-masing ke file `.json` dengan format siap insert ke tabel radiology.
@@ -179,7 +189,7 @@ Setiap file `NAMA.dcm` akan menghasilkan `NAMA.json`.
 
 ## Referensi Field JSON Radiology
 
-Format JSON output yang dihasilkan `export_text.py`:
+Format JSON output yang dihasilkan `scripts/export_json.py` (modul `dicom_generator.exporter`):
 
 ```json
 {
@@ -363,15 +373,85 @@ INSERT INTO radiology (
 ## Quick Start
 
 ```bash
-# 1. Buat DICOM batch (4 location)
-python generate_batch.py
+# 0. Install dependencies
+pip install -r requirements.txt
 
-# 2. Ekspor ke JSON untuk insert tabel radiology
-python export_text.py
+# 1. Jalankan web UI (cara termudah) — browser terbuka di http://127.0.0.1:8000
+python run.py
 
-# 3. (Opsional) Buat single DICOM dengan metadata custom
-python create-dicom.py --out custom.dcm --patient "Siti^Kusuma" --id 999888 --metadata metadata.json
+# 2. Alternatif CLI: buat DICOM batch (4 location)
+python scripts/generate_batch.py
+
+# 3. Ekspor ke JSON untuk insert tabel radiology
+python scripts/export_json.py
+
+# 4. (Opsional) Buat single DICOM dengan metadata custom
+python scripts/create_dicom.py --out custom.dcm --patient "Siti^Kusuma" --id 999888 --metadata data/metadata.json
 ```
+
+---
+
+## UI Web — DICOM Generator
+
+Web UI untuk membuat file DICOM tanpa command line. Menyediakan kontrol
+**jumlah DICOM per tanggal** dan **rentang tanggal** file DICOM.
+
+### Menjalankan
+
+```bash
+python run.py
+```
+
+Browser otomatis membuka `http://127.0.0.1:8000`. Alternatif:
+
+```bash
+python -m dicom_generator
+uvicorn dicom_generator.web.app:app --host 127.0.0.1 --port 8000
+```
+
+Port bisa diubah lewat environment variable `PORT` (default 8000).
+
+### Fitur utama
+
+- **Jumlah per tanggal** — berapa file DICOM yang dibuat untuk setiap tanggal (1–200).
+- **Rentang tanggal** — tanggal mulai & selesai. File dibuat untuk setiap tanggal
+  di rentang tersebut. Ada tombol cepat: Hari ini, 7 hari terakhir, 30 hari terakhir.
+- **Preview total** — ringkasan real-time (tanggal × jumlah = total file).
+- **Detail data (opsional)** — modality (CT/MR/US/DX/acak), location, institution,
+  department, guarantor, jenis kelamin pasien, dan gaya gambar (gradient/noise).
+- **Progress bar live** — pantau proses generate per file, bisa dibatalkan.
+- **Hasil & download** — tabel hasil, search + filter tanggal, download per file,
+  download semua sebagai `.zip`, ekspor `dicom_data.json`, dan tombol buka folder.
+
+### Konfigurasi Generate (API)
+
+| Field | Wajib | Default | Keterangan |
+|-------|-------|---------|------------|
+| `count_per_date` | Ya | 10 | Jumlah DICOM per tanggal (1–200) |
+| `start_date` | Ya | — | Tanggal mulai (`YYYY-MM-DD`) |
+| `end_date` | Ya | — | Tanggal selesai (`YYYY-MM-DD`) |
+| `modality` | Tidak | `CT` | `CT`/`MR`/`US`/`DX`/`random` |
+| `location` | Tidak | `random` | Lokasi atau `random` |
+| `institution` | Tidak | `random` | Nama RS atau `random` |
+| `guarantor` | Tidak | `BPJS` | Penjamin atau `random` |
+| `patient_sex` | Tidak | `random` | `M`/`F`/`random` |
+| `image_style` | Tidak | `gradient` | `gradient`/`noise` |
+| `output_dir` | Tidak | `generated_dicoms` | Folder output (di bawah `output/`) |
+
+### API endpoints
+
+| Method | Path | Keterangan |
+|--------|------|------------|
+| GET | `/api/options` | Opsi dropdown + limit |
+| GET | `/api/summary?dir=` | Statistik folder output |
+| POST | `/api/generate` | Mulai generate (body JSON config), mengembalikan `job_id` |
+| GET | `/api/jobs/{job_id}` | Status/progress job |
+| POST | `/api/jobs/{job_id}/cancel` | Batalkan job |
+| GET | `/api/jobs/{job_id}/results` | Data hasil (tabel) |
+| GET | `/api/records?dir=` | Baca `dicom_data.json` dari folder output |
+| GET | `/api/download/{filename}?dir=` | Download satu file `.dcm` |
+| GET | `/api/download-zip?dir=` | Download semua `.dcm` sebagai zip |
+| POST | `/api/open-folder?dir=` | Buka folder output di file manager |
 
 ---
 
@@ -381,9 +461,11 @@ python create-dicom.py --out custom.dcm --patient "Siti^Kusuma" --id 999888 --me
 pydicom
 numpy
 Pillow
+fastapi
+uvicorn
 ```
 
 Install:
 ```bash
-pip install pydicom numpy Pillow
+pip install -r requirements.txt
 ```

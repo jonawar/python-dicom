@@ -1,15 +1,26 @@
 #!/usr/bin/env python3
-"""Generate 1000 random worklist records, save to dicom_data.json,
-then login and POST each record to the worklist/request API."""
-import json
-import random
-import urllib.request
-import urllib.error
+"""Generate random worklist records, save to output/dicom_data.json,
+then login and POST each record to the worklist/request API.
 
-API = "http://localhost:8041"
+Config via environment variables:
+    DICOM_API_KEY   (required) API key for x-api-key header
+    DICOM_API_URL   (default http://localhost:8041)
+    DICOM_NUM       (default 1000) number of records
+"""
+import json
+import os
+import random
+import sys
+import time
+import urllib.error
+import urllib.request
+
+import _bootstrap
+
+API = os.environ.get("DICOM_API_URL", "http://localhost:8041")
 WORKLIST_URL = f"{API}/his/worklist/request"
-API_KEY = "ak_yVoNgz5SHA5CjZPrvXBP03rnrCNAqPXefl9EgLEC45Y"
-NUM = 1000
+API_KEY = os.environ.get("DICOM_API_KEY", "")
+NUM = int(os.environ.get("DICOM_NUM", "1000"))
 
 FIRST_M = ["BUDI", "AGUS", "RIZKI", "DONI", "HENDRA", "FAISAL", "YOGA", "ILHAM",
            "ANDI", "BAMBANG", "JOKO", "EKO", "WAHYU", "REZA", "DIMAS", "BAYU"]
@@ -29,16 +40,20 @@ DESC = ["CT TEST", "CT ABDOMEN", "CT KEPALA", "CT THORAX", "CT",
         "CT ANGIO", "MRI BRAIN", "USG ABDOMEN"]
 GUARANTOR = ["BPJS", "Mandiri", "Prudential", "Self Pay", "Allianz"]
 
+
 def rand_name(sex):
     first = random.choice(FIRST_M if sex == "M" else FIRST_F)
     last = random.choice(LAST)
     return f"{first} {last}"
 
+
 def rand_birth():
-    return f"{random.randint(1960,2008)}{random.randint(1,12):02d}{random.randint(1,28):02d}"
+    return f"{random.randint(1960, 2008)}{random.randint(1, 12):02d}{random.randint(1, 28):02d}"
+
 
 def rand_time():
-    return f"{random.randint(7,20):02d}{random.randint(0,59):02d}{random.randint(0,59):02d}"
+    return f"{random.randint(7, 20):02d}{random.randint(0, 59):02d}{random.randint(0, 59):02d}"
+
 
 def generate_records():
     used_ids = set()
@@ -56,7 +71,7 @@ def generate_records():
             "PatientSex": sex,
             "PatientBirthDate": rand_birth(),
             "AccessionNumber": acc,
-            "RequestedProcedureID": f"REQ-{random.randint(1000000,9999999)}",
+            "RequestedProcedureID": f"REQ-{random.randint(1000000, 9999999)}",
             "RequestedProcedureDescription": random.choice(DESC),
             "Modality": random.choice(["CT", "MR", "US", "XA"]),
             "ScheduledDate": random.choice(["20260807", "20260806", "20260805"]),
@@ -70,7 +85,6 @@ def generate_records():
         })
     return records
 
-import time
 
 def http_json(url, data=None, headers=None, method="GET", retries=3):
     body = json.dumps(data).encode("utf-8") if data is not None else None
@@ -93,15 +107,20 @@ def http_json(url, data=None, headers=None, method="GET", retries=3):
             return {"_http_error": "timeout", "_body": str(e)}
     return {"_http_error": "timeout", "_body": "max retries"}
 
+
 def main():
-    # 1. Generate 1000 records
+    if not API_KEY:
+        print("ERROR: set environment variable DICOM_API_KEY first.")
+        print('PowerShell: $env:DICOM_API_KEY = "ak_..."')
+        sys.exit(1)
+
     print(f"Generating {NUM} random records...")
     records = generate_records()
-    with open("dicom_data.json", "w", encoding="utf8") as f:
+    target = _bootstrap.output_dir() / "dicom_data.json"
+    with open(target, "w", encoding="utf8") as f:
         json.dump(records, f, indent=4, ensure_ascii=False)
-    print(f"Saved {len(records)} records to dicom_data.json")
+    print(f"Saved {len(records)} records to {target}")
 
-    # 2. Submit each record with API key
     print(f"\nSubmitting {len(records)} records to {WORKLIST_URL} ...")
     headers = {"x-api-key": API_KEY}
     ok = 0
@@ -111,13 +130,14 @@ def main():
         if "_http_error" in resp:
             fail += 1
             if fail <= 5 or i % 100 == 0:
-                print(f"[{i}/{len(records)}] FAIL PID={rec['PatientID']} -> {resp['_http_error']}: {resp.get('_body','')[:200]}")
+                print(f"[{i}/{len(records)}] FAIL PID={rec['PatientID']} -> {resp['_http_error']}: {resp.get('_body', '')[:200]}")
         else:
             ok += 1
         if i % 100 == 0:
             print(f"[{i}/{len(records)}] ok={ok} fail={fail}")
 
     print(f"\nDone. Success={ok}, Failed={fail}")
+
 
 if __name__ == "__main__":
     main()

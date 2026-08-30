@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DICOM Generator</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232dd4bf' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='18' rx='4'/%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="bg-glow" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <rect x="3" y="3" width="18" height="18" rx="4"/>
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <h1>DICOM Generator</h1>
+      <p>Dummy radiology worklist &amp; DICOM file generator</p>
+    </div>
+  </div>
+  <div class="topbar-badge" id="folder-badge" title="Folder output">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    <span id="folder-badge-text">generated_dicoms · 0 file</span>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- ============ FORM ============ -->
+  <section class="card form-card" aria-labelledby="form-title">
+    <div class="card-head">
+      <h2 id="form-title">Konfigurasi</h2>
+      <span class="card-hint">Atur jumlah &amp; rentang tanggal</span>
+    </div>
+
+    <div class="form-body">
+      <div class="field">
+        <label for="inp-count">Jumlah DICOM per tanggal</label>
+        <div class="stepper">
+          <button type="button" class="step-btn" id="count-dec" aria-label="Kurangi">−</button>
+          <input type="number" id="inp-count" min="1" max="200" value="10" inputmode="numeric" />
+          <button type="button" class="step-btn" id="count-inc" aria-label="Tambah">+</button>
+        </div>
+        <div class="chips" id="count-chips">
+          <button type="button" class="chip" data-count="5">5</button>
+          <button type="button" class="chip active" data-count="10">10</button>
+          <button type="button" class="chip" data-count="25">25</button>
+          <button type="button" class="chip" data-count="50">50</button>
+          <button type="button" class="chip" data-count="100">100</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Rentang tanggal jadwal</label>
+        <div class="date-row">
+          <div class="date-input">
+            <span class="date-label">Dari</span>
+            <input type="date" id="inp-start" />
+          </div>
+          <div class="date-arrow" aria-hidden="true">→</div>
+          <div class="date-input">
+            <span class="date-label">Sampai</span>
+            <input type="date" id="inp-end" />
+          </div>
+        </div>
+        <div class="chips" id="range-chips">
+          <button type="button" class="chip active" data-range="today">Hari ini</button>
+          <button type="button" class="chip" data-range="7">7 hari terakhir</button>
+          <button type="button" class="chip" data-range="30">30 hari terakhir</button>
+        </div>
+      </div>
+
+      <div class="summary-strip" id="summary-strip">
+        <div class="summary-cell">
+          <span class="summary-num" id="sum-dates">1</span>
+          <span class="summary-cap">tanggal</span>
+        </div>
+        <div class="summary-op">×</div>
+        <div class="summary-cell">
+          <span class="summary-num" id="sum-per">10</span>
+          <span class="summary-cap">file / tanggal</span>
+        </div>
+        <div class="summary-op">=</div>
+        <div class="summary-cell summary-total">
+          <span class="summary-num" id="sum-total">10</span>
+          <span class="summary-cap">total file</span>
+        </div>
+      </div>
+      <p class="summary-warn hidden" id="summary-warn"></p>
+
+      <details class="details-block">
+        <summary>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          Detail data <span class="muted">(opsional — default: acak)</span>
+        </summary>
+        <div class="details-body">
+          <div class="grid-2">
+            <div class="field">
+              <label for="sel-modality">Modality</label>
+              <select id="sel-modality"></select>
+            </div>
+            <div class="field">
+              <label for="sel-location">Lokasi</label>
+              <select id="sel-location"></select>
+            </div>
+            <div class="field">
+              <label for="sel-institution">Rumah sakit</label>
+              <select id="sel-institution"></select>
+            </div>
+            <div class="field">
+              <label for="sel-department">Departemen</label>
+              <select id="sel-department"></select>
+            </div>
+            <div class="field">
+              <label for="sel-guarantor">Penjamin</label>
+              <select id="sel-guarantor"></select>
+            </div>
+            <div class="field">
+              <label for="sel-sex">Jenis kelamin pasien</label>
+              <select id="sel-sex">
+                <option value="random" selected>Acak (M/F)</option>
+                <option value="M">Laki-laki (M)</option>
+                <option value="F">Perempuan (F)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="sel-image">Isi gambar</label>
+              <select id="sel-image">
+                <option value="gradient" selected>Gradien</option>
+                <option value="noise">Noise (acak)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="inp-outdir">Folder output</label>
+              <input type="text" id="inp-outdir" value="generated_dicoms" spellcheck="false" />
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-ghost" id="btn-reset" type="button">Reset</button>
+      <button class="btn btn-primary" id="btn-generate" type="button">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+        <span>Generate DICOM</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ============ RESULTS ============ -->
+  <section class="results-col">
+    <div class="stats-row">
+      <div class="stat-card">
+        <span class="stat-num" id="stat-batch">0</span>
+        <span class="stat-label">File batch terakhir</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-num" id="stat-folder">0</span>
+        <span class="stat-label">Total di folder output</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-num" id="stat-size">0 KB</span>
+        <span class="stat-label">Ukuran folder</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-num" id="stat-time">—</span>
+        <span class="stat-label">Durasi proses</span>
+      </div>
+    </div>
+
+    <div class="card progress-card hidden" id="progress-card">
+      <div class="progress-head">
+        <div class="progress-info">
+          <span class="spinner" aria-hidden="true"></span>
+          <span id="prog-msg">Memulai...</span>
+        </div>
+        <button class="btn btn-danger-ghost btn-sm" id="btn-cancel" type="button">Batalkan</button>
+      </div>
+      <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="prog-track">
+        <div class="progress-fill" id="prog-fill"></div>
+      </div>
+      <div class="progress-meta">
+        <span id="prog-count">0 / 0 file</span>
+        <span id="prog-pct">0%</span>
+      </div>
+    </div>
+
+    <div class="card results-card">
+      <div class="results-toolbar">
+        <div class="toolbar-left">
+          <h3>Hasil generate</h3>
+          <span class="badge" id="row-count">0 baris</span>
+        </div>
+        <div class="toolbar-right">
+          <div class="search-wrap">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input type="search" id="inp-search" placeholder="Cari ID / nama / RS..." autocomplete="off" />
+          </div>
+          <select id="sel-filter-date" title="Filter tanggal"><option value="">Semua tanggal</option></select>
+          <button class="btn btn-ghost btn-sm" id="btn-refresh" title="Muat ulang data" type="button">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>
+          </button>
+          <button class="btn btn-ghost btn-sm" id="btn-open" type="button">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            <span>Buka folder</span>
+          </button>
+          <button class="btn btn-ghost btn-sm" id="btn-json" type="button">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"/></svg>
+            <span>JSON</span>
+          </button>
+          <button class="btn btn-primary btn-sm" id="btn-zip" type="button">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"/></svg>
+            <span>Unduh semua (.zip)</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="results-table" id="results-table">
+          <thead>
+            <tr>
+              <th class="th-idx">#</th>
+              <th>Patient ID</th>
+              <th>Nama</th>
+              <th>JK</th>
+              <th>Tgl lahir</th>
+              <th>Jadwal</th>
+              <th>Modality</th>
+              <th>Lokasi</th>
+              <th>Rumah sakit</th>
+              <th>Penjamin</th>
+              <th class="th-act"></th>
+            </tr>
+          </thead>
+          <tbody id="results-body"></tbody>
+        </table>
+        <div class="empty-state" id="empty-state">
+          <svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
+          <p>Belum ada data.<br/>Atur konfigurasi lalu klik <strong>Generate DICOM</strong>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="modal-backdrop hidden" id="modal-backdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h3 id="modal-title">Konfirmasi</h3>
+    <p id="modal-body"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="modal-no" type="button">Batal</button>
+      <button class="btn btn-primary" id="modal-yes" type="button">Ya, lanjutkan</button>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

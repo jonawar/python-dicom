@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dicom-generator"
+version = "1.0.0"
+description = "Generator file DICOM dummy & radiology worklist dengan web UI"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pydicom",
+    "numpy",
+    "Pillow",
+    "fastapi",
+    "uvicorn",
+]
+
+[project.scripts]
+dicomgen-web = "dicom_generator.web.app:main"
+
+[tool.setuptools]
+packages = ["dicom_generator", "dicom_generator.web"]
+
+[tool.setuptools.package-data]
+"dicom_generator.web" = ["static/*"]

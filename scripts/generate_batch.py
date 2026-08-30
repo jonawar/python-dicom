@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
-import json
+"""Legacy: generate one DICOM per location into output/generated_dicoms."""
 import random
-import sys
-import os
+
+import _bootstrap
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import importlib.util as _ilu
-_spec = _ilu.spec_from_file_location("create_dicom_mod",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "create-dicom.py"))
-_mod = _ilu.module_from_spec(_spec)
-_spec.loader.exec_module(_mod)
-create_dicom_from_array = _mod.create_dicom_from_array
+from dicom_generator.core import create_dicom_from_array
 
 TODAY_DATE = "20260602"
 TODAY_TIME = "100000"
@@ -25,27 +19,32 @@ LAST_NAMES = ["Santoso", "Wijaya", "Kusuma", "Pratama", "Saputra", "Hidayat",
               "Nugroho", "Utami", "Wulandari", "Siregar", "Nasution", "Gunawan",
               "Wibowo", "Handayani", "Permadi", "Hartono"]
 
+OUT_DIR = _bootstrap.output_dir("generated_dicoms")
+
+
 def random_patient_name():
-    first = random.choice(FIRST_NAMES)
-    last = random.choice(LAST_NAMES)
-    return f"{first}^{last}"
+    return f"{random.choice(FIRST_NAMES)}^{random.choice(LAST_NAMES)}"
+
 
 def random_patient_id():
     return f"{random.randint(100000, 999999)}"
 
+
 def random_physician():
-    first = random.choice(FIRST_NAMES)
-    last = random.choice(LAST_NAMES)
-    return f"dr {first} {last}"
+    return f"dr {random.choice(FIRST_NAMES)} {random.choice(LAST_NAMES)}"
+
 
 def random_accession():
     return f"ACC-{random.randint(100000, 999999)}"
 
+
 def random_requested_id():
     return f"REQ-{random.randint(100000, 999999)}"
 
+
 def random_sps_id():
     return f"SPS-{random.randint(100000, 999999)}"
+
 
 def build_metadata(location):
     patient_name = random_patient_name()
@@ -62,7 +61,7 @@ def build_metadata(location):
             "PatientID": patient_id,
             "PatientName": patient_name,
             "PatientSex": random.choice(["M", "F"]),
-            "PatientBirthDate": f"{random.randint(1950, 2005)}{random.randint(1,12):02d}{random.randint(1,28):02d}",
+            "PatientBirthDate": f"{random.randint(1950, 2005)}{random.randint(1, 12):02d}{random.randint(1, 28):02d}",
             "AccessionNumber": random_accession(),
             "RequestedProcedureID": random_requested_id(),
             "RequestedProcedureDescription": location,
@@ -81,6 +80,7 @@ def build_metadata(location):
         }
     }
 
+
 def main():
     np.random.seed()
     random.seed()
@@ -90,12 +90,12 @@ def main():
         patient_name = meta["Tags"]["PatientName"]
         patient_id = meta["Tags"]["PatientID"]
         safe_loc = loc.replace(" ", "_").replace("/", "_")
-        filename = f"{safe_loc}_{patient_id}.dcm"
+        filepath = OUT_DIR / f"{safe_loc}_{patient_id}.dcm"
 
         arr = np.random.randint(0, 256, (256, 256), dtype=np.uint8)
 
-        ds = create_dicom_from_array(
-            filename=filename,
+        create_dicom_from_array(
+            filename=str(filepath),
             arr=arr,
             patient_name=patient_name,
             patient_id=patient_id,
@@ -103,9 +103,10 @@ def main():
             series_description=loc,
             metadata=meta["Tags"]
         )
-        print(f"Created: {filename}  |  Patient: {patient_name}  |  Location: {loc}")
+        print(f"Created: {filepath.name}  |  Patient: {patient_name}  |  Location: {loc}")
 
     print("\nAll DICOM files generated successfully.")
+
 
 if __name__ == "__main__":
     main()

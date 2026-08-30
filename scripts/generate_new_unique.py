@@ -1,20 +1,15 @@
 #!/usr/bin/env python3
+"""Legacy: 10 DICOMs with unique patient names (5 today + 5 yesterday)."""
 import json
-import os
 import random
-import numpy as np
-import importlib.util as _ilu
 from datetime import datetime, timedelta
 
-WORKSPACE = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_DIR = os.path.join(WORKSPACE, "generated_dicoms")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+import _bootstrap
+import numpy as np
 
-_spec = _ilu.spec_from_file_location("create_dicom_mod",
-    os.path.join(WORKSPACE, "create-dicom.py"))
-_mod = _ilu.module_from_spec(_spec)
-_spec.loader.exec_module(_mod)
-create_dicom_from_array = _mod.create_dicom_from_array
+from dicom_generator.core import create_dicom_from_array
+
+OUTPUT_DIR = _bootstrap.output_dir("generated_dicoms")
 
 TODAY = datetime.now()
 YESTERDAY = TODAY - timedelta(days=1)
@@ -32,18 +27,21 @@ LOCATIONS = ["UGD", "RUANG CT", "ICU", "RADIOLOGI"]
 DEPARTMENTS = ["Radiologi", "UGD", "Penyakit Dalam", "ICU"]
 INSTITUTIONS = ["RS Sehat Sentosa", "RS Cahaya Medika", "RS Bersama Kita", "RS Dummy"]
 
+
 def _max_num(prefix):
-    files = [f for f in os.listdir(OUTPUT_DIR) if f.startswith(prefix) and f.endswith(".dcm")]
+    files = [f for f in OUTPUT_DIR.iterdir() if f.name.startswith(prefix) and f.name.endswith(".dcm")]
     nums = []
     for f in files:
         try:
-            nums.append(int(f.split("_")[-1].replace(".dcm", "")))
+            nums.append(int(f.name.split("_")[-1].replace(".dcm", "")))
         except ValueError:
             pass
     return max(nums) if nums else 0
 
+
 used_names = set()
 used_ids = set()
+
 
 def unique_patient(idx):
     random.seed(idx * 137 + 42)
@@ -62,6 +60,7 @@ def unique_patient(idx):
             break
         idx += 1
     return name, pid
+
 
 def build_json_entry(idx, date_str, time_str, dicom_path):
     name, pid = unique_patient(idx)
@@ -101,6 +100,7 @@ def build_json_entry(idx, date_str, time_str, dicom_path):
         entry["DicomFile"] = dicom_path
     return entry
 
+
 def build_dicom_metadata(entry, date_str, time_str):
     return {
         "PatientID": entry["PatientID"],
@@ -128,15 +128,16 @@ def build_dicom_metadata(entry, date_str, time_str):
         ]
     }
 
+
 def generate_dicom(entry, date_str, time_str, num):
     filename = f"dummy_{date_str}_{num:02d}.dcm"
-    filepath = os.path.join(OUTPUT_DIR, filename)
+    filepath = OUTPUT_DIR / filename
 
     arr = np.random.randint(0, 256, (256, 256), dtype=np.uint8)
     meta = build_dicom_metadata(entry, date_str, time_str)
 
-    ds = create_dicom_from_array(
-        filename=filepath,
+    create_dicom_from_array(
+        filename=str(filepath),
         arr=arr,
         patient_name=entry["PatientName"].replace(" ", "^"),
         patient_id=entry["PatientID"],
@@ -145,7 +146,8 @@ def generate_dicom(entry, date_str, time_str, num):
         metadata=meta
     )
     print(f"Created DICOM: {filename}")
-    return filepath
+    return str(filepath)
+
 
 def main():
     random.seed(2026)
@@ -180,25 +182,23 @@ def main():
         entry["DicomFile"] = dicom_path
         all_entries.append(entry)
 
-    all_meta_path = os.path.join(OUTPUT_DIR, "all_metadata.json")
+    all_meta_path = OUTPUT_DIR / "all_metadata.json"
     existing = []
-    if os.path.exists(all_meta_path):
-        with open(all_meta_path, "r", encoding="utf-8") as f:
-            try:
-                existing = json.load(f)
-            except:
-                existing = []
+    if all_meta_path.exists():
+        try:
+            existing = json.loads(all_meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = []
     existing.extend(all_entries)
-    with open(all_meta_path, "w", encoding="utf-8") as f:
-        json.dump(existing, f, indent=4, ensure_ascii=False)
+    all_meta_path.write_text(json.dumps(existing, indent=4, ensure_ascii=False), encoding="utf-8")
     print(f"\nUpdated: all_metadata.json ({len(existing)} total entries)")
 
-    dicom_data_new_path = os.path.join(WORKSPACE, "dicom_data_new.json")
-    with open(dicom_data_new_path, "w", encoding="utf-8") as f:
-        json.dump(all_entries, f, indent=4, ensure_ascii=False)
-    print(f"Created: dicom_data_new.json ({len(all_entries)} entries)")
+    dicom_data_new_path = _bootstrap.OUTPUT_ROOT / "dicom_data_new.json"
+    dicom_data_new_path.write_text(json.dumps(all_entries, indent=4, ensure_ascii=False), encoding="utf-8")
+    print(f"Created: {dicom_data_new_path} ({len(all_entries)} entries)")
 
-    print(f"\nDone! Generated 10 DICOM files and JSON data.")
+    print("\nDone! Generated 10 DICOM files and JSON data.")
+
 
 if __name__ == "__main__":
     main()

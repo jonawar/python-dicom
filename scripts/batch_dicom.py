@@ -2,22 +2,28 @@
 """Generate N DICOM files per date and dump a flattened JSON summary.
 
 Usage:
-    python batch_dicom.py 10            # 10 files for today
-    python batch_dicom.py 10 1          # 10 files each for today and yesterday
-    python batch_dicom.py 5 3           # 5 files each for today and 3 days back
+    python scripts/batch_dicom.py 10            # 10 files for today
+    python scripts/batch_dicom.py 10 1          # 10 files each for today and yesterday
+    python scripts/batch_dicom.py 5 3           # 5 files each for today and 3 days back
+
+Output goes to output/generated_dicoms/. Prefer the web UI (python run.py)
+for interactive use.
 """
 import json
-import os
 import random
-import subprocess
 import sys
 from datetime import datetime, timedelta
 
+import _bootstrap  # noqa: F401
 from pydicom import dcmread
+
+from dicom_generator.core import create_dicom_from_array, synthetic_array
+from dicom_generator.paths import resolve_output_dir
 
 NUM = int(sys.argv[1]) if len(sys.argv) > 1 else 10
 DAYS_BACK = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 TODAY = datetime.now()
+OUT_DIR = resolve_output_dir("generated_dicoms")
 
 FIRST_M = ["BUDI", "AGUS", "RIZKI", "DONI", "HENDRA", "FAISAL", "YOGA", "ILHAM"]
 FIRST_F = ["SARI", "DEWI", "PUTRI", "NISA", "RINA", "INTAN", "MAYA", "LIA"]
@@ -29,40 +35,38 @@ AE = ["CT01", "ct_pro", "CT02", "CTSCANNER"]
 REF = ["DR Josh", "DR DUMMY", "DR Andi", "DR Lestari", "DR Bambang"]
 DESC = ["CT TEST", "CT ABDOMEN", "CT KEPALA", "CT THORAX", "CT"]
 
+
 def rand_name(sex):
     first = random.choice(FIRST_M if sex == "M" else FIRST_F)
     last = random.choice(LAST)
     return f"{last}^{first}", f"{first} {last}"
 
+
 def rand_birth():
-    y = random.randint(1970, 2005)
-    m = random.randint(1, 12)
-    d = random.randint(1, 28)
-    return f"{y}{m:02d}{d:02d}"
+    return (f"{random.randint(1970, 2005)}"
+            f"{random.randint(1, 12):02d}{random.randint(1, 28):02d}")
+
 
 def rand_time():
-    h = random.randint(7, 18)
-    m = random.randint(0, 59)
-    s = random.randint(0, 59)
-    return f"{h:02d}{m:02d}{s:02d}"
+    return (f"{random.randint(7, 18):02d}"
+            f"{random.randint(0, 59):02d}{random.randint(0, 59):02d}")
+
 
 def make(i, date_str, suffix):
     sex = random.choice(["M", "F"])
     pid = f"{date_str}{i:02d}"
     dicom_name, plain_name = rand_name(sex)
-    birth = rand_birth()
-    sched_time = rand_time()
     dept = random.choice(DEPT)
     loc = random.choice(LOC)
     inst = random.choice(INST)
     ae_title = random.choice(AE)
     ref = random.choice(REF)
     desc = random.choice(DESC)
-    m = {"Tags": {
+    tags = {
         "PatientID": pid,
         "PatientName": plain_name,
         "PatientSex": sex,
-        "PatientBirthDate": birth,
+        "PatientBirthDate": rand_birth(),
         "AccessionNumber": f"ACC-{pid}",
         "RequestedProcedureID": f"REQ-{pid}",
         "RequestedProcedureDescription": desc,
@@ -75,27 +79,31 @@ def make(i, date_str, suffix):
         "ScheduledProcedureStepSequence": [{
             "Modality": "CT",
             "ScheduledProcedureStepStartDate": date_str,
-            "ScheduledProcedureStepStartTime": sched_time,
+            "ScheduledProcedureStepStartTime": rand_time(),
             "ScheduledStationAETitle": ae_title,
             "ScheduledProcedureStepID": f"SPS-{pid}",
             "ScheduledProcedureStepDescription": desc,
-            "ScheduledStationName": f"RAD-ROOM{random.randint(1,4)}",
-            "ScheduledProcedureStepLocation": loc
-        }]
-    }}
-    tmp = f"_meta_{pid}.json"
-    with open(tmp, "w", encoding="utf8") as f:
-        json.dump(m, f, indent=2)
-    out = f"dicom_{pid}{suffix}.dcm"
-    subprocess.run(["python", "create-dicom.py", "--out", out, "--metadata", tmp],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-    os.remove(tmp)
-    return out
+            "ScheduledStationName": f"RAD-ROOM{random.randint(1, 4)}",
+            "ScheduledProcedureStepLocation": loc,
+        }],
+    }
+    out = OUT_DIR / f"dicom_{pid}{suffix}.dcm"
+    create_dicom_from_array(
+        filename=str(out),
+        arr=synthetic_array(256, 256, "gradient", 8),
+        patient_name=plain_name,
+        patient_id=pid,
+        modality="CT",
+        series_description=desc,
+        metadata=tags,
+    )
+    return out.name
+
 
 def dump_json(files):
     out = []
     for f in files:
-        ds = dcmread(f)
+        ds = dcmread(str(OUT_DIR / f))
         sps = ds.ScheduledProcedureStepSequence[0] if "ScheduledProcedureStepSequence" in ds else None
         out.append({
             "PatientID": getattr(ds, "PatientID", ""),
@@ -113,9 +121,10 @@ def dump_json(files):
             "Location": getattr(sps, "ScheduledProcedureStepLocation", "") if sps else "",
             "Department": getattr(ds, "InstitutionalDepartmentName", ""),
             "Institution": getattr(ds, "InstitutionName", ""),
-            "Guarantor": "BPJS"
+            "Guarantor": "BPJS",
         })
     return out
+
 
 def main():
     dates = []
@@ -128,10 +137,12 @@ def main():
             files.append(make(i, date_str, suffix))
         print(f"Created {NUM} files for {date_str}")
     data = dump_json(files)
-    with open("dicom_data.json", "w", encoding="utf8") as f:
+    target = OUT_DIR / "dicom_data.json"
+    with open(target, "w", encoding="utf8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
-    print(f"\nWrote {len(data)} entries to dicom_data.json\n")
+    print(f"\nWrote {len(data)} entries to {target}\n")
     print(json.dumps(data, indent=4, ensure_ascii=False))
+
 
 if __name__ == "__main__":
     main()
